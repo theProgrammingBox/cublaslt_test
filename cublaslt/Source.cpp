@@ -1,8 +1,9 @@
 #include <cuda_runtime.h>
-#include <cublas_v2.h>
+//#include <cublas_v2.h>
 #include <curand.h>
 #include <iostream>
 #include <chrono>
+#include <cublasLt.h>
 
 using std::cout;
 using std::endl;
@@ -12,76 +13,58 @@ using std::chrono::nanoseconds;
 
 int main()
 {
-	const int inputEntries = 10;
-	const int inputFeatures = 5;
-	const int outputFeatures = 5;
+	const uint32_t inputEntries = 4;
+	const uint32_t inputFeatures = 6;
+	const uint32_t outputFeatures = 6;
 
-	void* workspace = nullptr;
-    cublasLtHandle_t ltHandle = nullptr;
-    cublasLtMatmulDesc_t operationDesc = nullptr;
-    cublasLtMatrixLayout_t adesc = nullptr, bdesc = nullptr, cdesc = nullptr;
-    cublasLtMatmulPreference_t preference = nullptr;
-    cublasLtMatmulHeuristicResult_t heuristicResult = {};
+	float* CPUWorkspace = (float*)malloc((inputEntries * inputFeatures + inputFeatures * outputFeatures + outputFeatures + inputEntries * outputFeatures) * sizeof(float));
+	float* CPUInputMatrix = (float*)CPUWorkspace;
+	float* CPUWeightMatrix = CPUInputMatrix + inputEntries * inputFeatures;
+	float* CPUBiasVector = CPUWeightMatrix + inputFeatures * outputFeatures;
+	float* CPUOutputMatrix = CPUBiasVector + outputFeatures;
 
-	void* CPUWorkspace = nullptr;
-	malloc(&CPUWorkspace, (inputEntries * inputFeatures + inputFeatures * outputFeatures + outputFeatures + inputEntries * outputFeatures) * sizeof(float));
-	
-    uint32_t workspaceSize = 4194304;
-    cudaMalloc(&workspace, workspaceSize + (inputEntries * inputFeatures + inputFeatures * outputFeatures + outputFeatures + inputEntries * outputFeatures) * sizeof(float));
-	float* inputMatrix = (float*)workspace + workspaceSize;
-	float* weightMatrix = inputMatrix + inputEntries * inputFeatures;
-	float* biasVector = weightMatrix + inputFeatures * outputFeatures;
-	float* outputMatrix = biasVector + outputFeatures;
-	
-	cublasLtMatmulDesc_t operationDesc = NULL;
-	cublasLtMatrixLayout_t Adesc = NULL, Bdesc = NULL, Cdesc = NULL;
-	cublasLtMatmulPreference_t preference = NULL;
-	
-	int returnedResults = 0;
-	cublasLtMatmulHeuristicResult_t heuristicResult = {};
-    cublasOperation_t transa = CUBLAS_OP_N;
-    cublasOperation_t transb = CUBLAS_OP_N;
-    cublasLtHandle_t ltHandle;
-    cublasLtCreate(&ltHandle);
-	
-	checkCublasStatus(cublasLtMatmulDescCreate(&operationDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
-	checkCublasStatus(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSA, &transa, sizeof(transa)));
-    checkCublasStatus(cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSB, &transb, sizeof(transa)));
-	
-    checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_32F, m, k, lda));
-    checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_32F, k, n, ldb));
-    checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_32F, m, n, ldc));
-	
-    checkCublasStatus(cublasLtMatmulPreferenceCreate(&preference));
-    checkCublasStatus(cublasLtMatmulPreferenceSetAttribute(preference, CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &workspaceSize, sizeof(workspaceSize)));
-	
-    checkCublasStatus(cublasLtMatmulAlgoGetHeuristic(ltHandle, operationDesc, Adesc, Bdesc, Cdesc, Cdesc, preference, 1, &heuristicResult, &returnedResults));
+	float* GPUWorkspace = nullptr;
+	uint32_t extraWorkspaceSize = 4194304;
+	cudaMalloc(&GPUWorkspace, extraWorkspaceSize + (inputEntries * inputFeatures + inputFeatures * outputFeatures + outputFeatures + inputEntries * outputFeatures) * sizeof(float));
+	float* GPUInputMatrix = (float*)GPUWorkspace + extraWorkspaceSize;
+	float* GPUWeightMatrix = GPUInputMatrix + inputEntries * inputFeatures;
+	float* GPUBiasVector = GPUWeightMatrix + inputFeatures * outputFeatures;
+	float* GPUOutputMatrix = GPUBiasVector + outputFeatures;
 
-    if (returnedResults == 0) {
-        checkCublasStatus(CUBLAS_STATUS_NOT_SUPPORTED);
-    }
+	curandGenerator_t gen;
+	curandCreateGenerator(&gen, CURAND_RNG_PSEUDO_DEFAULT);
+	curandSetPseudoRandomGeneratorSeed(gen, duration_cast<nanoseconds>(high_resolution_clock::now().time_since_epoch()).count());
+	curandGenerateNormal(gen, GPUInputMatrix, (inputEntries * inputFeatures + inputFeatures * outputFeatures + outputFeatures), 0.0f, 1.0f);
+	cudaMemcpy(CPUInputMatrix, GPUInputMatrix, (inputEntries * inputFeatures + inputFeatures * outputFeatures + outputFeatures) * sizeof(float), cudaMemcpyDeviceToHost);
+	
+	cout << "Input Matrix" << endl;
+	for (uint32_t i = 0; i < inputEntries; i++)
+	{
+		for (uint32_t j = 0; j < inputFeatures; j++)
+		{
+			cout << CPUInputMatrix[i * inputFeatures + j] << " ";
+		}
+		cout << endl;
+	}
+	cout << endl;
+	
+	cout << "Weight Matrix" << endl;
+	for (uint32_t i = 0; i < inputFeatures; i++)
+	{
+		for (uint32_t j = 0; j < outputFeatures; j++)
+		{
+			cout << CPUWeightMatrix[i * outputFeatures + j] << " ";
+		}
+		cout << endl;
+	}
+	cout << endl;
 
-    checkCublasStatus(cublasLtMatmul(ltHandle,
-        operationDesc,
-        alpha,
-        A,
-        Adesc,
-        B,
-        Bdesc,
-        beta,
-        C,
-        Cdesc,
-        C,
-        Cdesc,
-        &heuristicResult.algo,
-        workspace,
-        workspaceSize,
-        0));
-
-    // descriptors are no longer needed as all GPU work was already enqueued
-    if (preference) checkCublasStatus(cublasLtMatmulPreferenceDestroy(preference));
-    if (Cdesc) checkCublasStatus(cublasLtMatrixLayoutDestroy(Cdesc));
-    if (Bdesc) checkCublasStatus(cublasLtMatrixLayoutDestroy(Bdesc));
-    if (Adesc) checkCublasStatus(cublasLtMatrixLayoutDestroy(Adesc));
-    if (operationDesc) checkCublasStatus(cublasLtMatmulDescDestroy(operationDesc));
+	cout << "Bias Vector" << endl;
+	for (uint32_t i = 0; i < outputFeatures; i++)
+	{
+		cout << CPUBiasVector[i] << " ";
+	}
+	cout << endl << endl;
+	
+	return 0;
 }
