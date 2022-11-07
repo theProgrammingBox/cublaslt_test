@@ -16,6 +16,7 @@ int main()
 	const uint32_t inputEntries = 4;
 	const uint32_t inputFeatures = 6;
 	const uint32_t outputFeatures = 6;
+	// test odd size
 
 	float* CPUWorkspace = (float*)malloc((inputEntries * inputFeatures + inputFeatures * outputFeatures + outputFeatures + inputEntries * outputFeatures) * sizeof(float));
 	float* CPUInputMatrix = (float*)CPUWorkspace;
