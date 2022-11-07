@@ -21,21 +21,22 @@ int main()
 	float* CPUInputMatrix = (float*)CPUWorkspace;
 	float* CPUWeightMatrix = CPUInputMatrix + inputEntries * inputFeatures;
 	float* CPUBiasVector = CPUWeightMatrix + inputFeatures * outputFeatures;
-	float* CPUOutputMatrix = CPUBiasVector + outputFeatures;
+	/*float* CPUOutputMatrix = CPUBiasVector + outputFeatures; */
 
 	float* GPUWorkspace = nullptr;
-	uint32_t extraWorkspaceSize = 4194304;
-	cudaMalloc(&GPUWorkspace, extraWorkspaceSize + (inputEntries * inputFeatures + inputFeatures * outputFeatures + outputFeatures + inputEntries * outputFeatures) * sizeof(float));
-	float* GPUInputMatrix = (float*)GPUWorkspace + extraWorkspaceSize;
+	//uint32_t extraWorkspaceSize = 4194304;
+	//cudaMalloc(&GPUWorkspace, extraWorkspaceSize + (inputEntries * inputFeatures + inputFeatures * outputFeatures + outputFeatures + inputEntries * outputFeatures) * sizeof(float));
+	cudaMalloc(&GPUWorkspace, (inputEntries * inputFeatures + inputFeatures * outputFeatures + outputFeatures + inputEntries * outputFeatures) * sizeof(float));
+	/*float* GPUInputMatrix = (float*)GPUWorkspace + extraWorkspaceSize;
 	float* GPUWeightMatrix = GPUInputMatrix + inputEntries * inputFeatures;
 	float* GPUBiasVector = GPUWeightMatrix + inputFeatures * outputFeatures;
-	float* GPUOutputMatrix = GPUBiasVector + outputFeatures;
+	float* GPUOutputMatrix = GPUBiasVector + outputFeatures;*/
 
 	curandGenerator_t gen;
 	curandCreateGenerator(&gen, CURAND_RNG_PSEUDO_DEFAULT);
 	curandSetPseudoRandomGeneratorSeed(gen, duration_cast<nanoseconds>(high_resolution_clock::now().time_since_epoch()).count());
-	curandGenerateNormal(gen, GPUInputMatrix, (inputEntries * inputFeatures + inputFeatures * outputFeatures + outputFeatures), 0.0f, 1.0f);
-	cudaMemcpy(CPUInputMatrix, GPUInputMatrix, (inputEntries * inputFeatures + inputFeatures * outputFeatures + outputFeatures) * sizeof(float), cudaMemcpyDeviceToHost);
+	curandGenerateNormal(gen, GPUWorkspace, (inputEntries * inputFeatures + inputFeatures * outputFeatures + outputFeatures), 0.0f, 1.0f);
+	cudaMemcpy(CPUWorkspace, GPUWorkspace, (inputEntries * inputFeatures + inputFeatures * outputFeatures + outputFeatures) * sizeof(float), cudaMemcpyDeviceToHost);
 	
 	cout << "Input Matrix" << endl;
 	for (uint32_t i = 0; i < inputEntries; i++)
@@ -53,7 +54,7 @@ int main()
 	{
 		for (uint32_t j = 0; j < outputFeatures; j++)
 		{
-			cout << CPUWeightMatrix[i * outputFeatures + j] << " ";
+			cout << CPUWeightMatrix[i * outputFeatures] << " ";
 		}
 		cout << endl;
 	}
