@@ -129,6 +129,30 @@ int main()
 		cout << endl;
 	}
 	cout << endl;
+
+	float avgErr = 0;
+	for (uint32_t i = 0; i < inputEntries; i++)
+	{
+		for (uint32_t j = 0; j < outputFeatures; j++)
+		{
+			float sum = CPUBiasVector[j];
+			for (uint32_t k = 0; k < inputFeatures; k++)
+			{
+				sum += CPUInputMatrix[i * inputFeatures + k] * CPUWeightMatrix[k * outputFeatures + j];
+			}
+			cout << sum << " ";
+			sum += CPUBiasVector[j];
+			if (sum < 0.0f)
+			{
+				sum = 0.0f;
+			}
+			avgErr += abs(sum - CPUOutputMatrix[i * outputFeatures + j]);
+		}
+		cout << endl;
+	}
+	cout << endl;
+	avgErr /= (inputEntries * outputFeatures);
+	cout << "Average Error: " << avgErr << endl;
 	
 	return 0;
 }
